@@ -5,6 +5,7 @@ import os
 import torch
 
 import posenet
+import json
 
 
 parser = argparse.ArgumentParser()
@@ -28,7 +29,8 @@ def main():
     filenames = [f.path for f in os.scandir(args.image_dir) if f.is_file() and f.path.endswith(('.png', '.jpg'))]
 
     start = time.time()
-    for f in filenames:
+    for i,f in enumerate(filenames):
+
         input_image, draw_image, output_scale = posenet.read_imgfile(
             f, scale_factor=args.scale_factor, output_stride=output_stride)
 
@@ -49,10 +51,7 @@ def main():
         keypoint_coords *= output_scale
 
         if args.output_dir:
-            import pdb;pdb.set_trace()
             draw_image = posenet.draw_skel_and_kp(draw_image, pose_scores, keypoint_scores, keypoint_coords,min_pose_score=0.25, min_part_score=0.25)
-            save
-
             cv2.imwrite(os.path.join(args.output_dir, os.path.relpath(f, args.image_dir)), draw_image)
 
         if not args.notxt:
@@ -60,16 +59,41 @@ def main():
             print("Results for image: %s" % f)
 
             max_score = 0
-            
+            mas_index = 0
+
             for pi in range(len(pose_scores)):
+
+                if max_score > pose_scores[pi] :
+                    max_index = pi
+
                 if pose_scores[pi] == 0.:
                     break
                 print('Pose #%d, score = %f' % (pi, pose_scores[pi]))
                 for ki, (s, c) in enumerate(zip(keypoint_scores[pi, :], keypoint_coords[pi, :, :])):
                     print('Keypoint %s, score = %f, coord = %s' % (posenet.PART_NAMES[ki], s, c))
 
+            data = dict(image_name=[f[10:-4]])
+
+            for ki, (s, c) in enumerate(zip(keypoint_scores[mas_index, :], keypoint_coords[mas_index, :, :])):
+                data[posenet.PART_NAMES[ki]] = c.tolist()
+            
+
+            
+            with open(os.path.join(args.output_dir,f[10:-4]+".json"),"w") as json_file :
+                json.dump(data, json_file, indent="\t")
+
+            
+
+
     print('Average FPS:', len(filenames) / (time.time() - start))
 
 
 if __name__ == "__main__":
     main()
+
+
+PART_NAMES = [
+    "nose", "leftEye", "rightEye", "leftEar", "rightEar", "leftShoulder",
+    "rightShoulder", "leftElbow", "rightElbow", "leftWrist", "rightWrist",
+    "leftHip", "rightHip", "leftKnee", "rightKnee", "leftAnkle", "rightAnkle"
+]
