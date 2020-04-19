@@ -13,6 +13,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--model', type=int, default=101)
 parser.add_argument('--scale_factor', type=float, default=1.0)
 parser.add_argument('--notxt', action='store_true')
+parser.add_argument('--video_dir', type=str, default='./video_in')
 parser.add_argument('--image_dir', type=str, default='./test_in')
 parser.add_argument('--output_dir', type=str, default='./test_out')
 args = parser.parse_args()
@@ -94,11 +95,32 @@ def xy_to_feature_6(lefthip, righthip, leftknee, rightknee, leftankle, rightankl
 
     return [leftkneeangle, rightkneeangle]
 
+def video2frame(invideofilename, save_path):
+    vidcap = cv2.VideoCapture(invideofilename)
+    count = 0
+    while True:
+      success,image = vidcap.read()
+      if not success:
+          break
+      print ('Read a new frame: ', success)
+      fname = "{}.jpg".format("{0:05d}".format(count))
+      cv2.imwrite(save_path + fname, image) # save frame as JPEG file
+      count += 1
+    print("{} images are extracted in {}.". format(count, save_path))
 
 def main():
     model = posenet.load_model(args.model)
     model = model.cuda()
     output_stride = model.output_stride
+    
+    video_filenames = [v.path for v in os.scandir(args.video_dir) if v.is_file() and v.path.endswith(('.mp4'))]
+   
+    if args.image_dir:
+        if not os.path.exists(args.image_dir):
+            os.makedirs(args.image_dir)
+
+    for iv,v in enumerate(video_filenames):
+        video2frame(v,args.image_dir)
 
     if args.output_dir:
         if not os.path.exists(args.output_dir):
@@ -138,6 +160,7 @@ def main():
 
             max_score = 0
             max_index = 0
+            ignore = 0
 
             for pi in range(len(pose_scores)):
 
@@ -145,43 +168,42 @@ def main():
                     max_index = pi
 
                 if pose_scores[pi] == 0.:
+                    ignore = 1
                     break
 
                 print('Pose #%d, score = %f' % (pi, pose_scores[pi]))
 
                 for ki, (s, c) in enumerate(zip(keypoint_scores[pi, :], keypoint_coords[pi, :, :])):
                     print('Keypoint %s, score = %f, coord = %s' % (posenet.PART_NAMES[ki], s, c))
-
-            tmp_data = dict()
-            out_data = dict(image_name=[f[10:-4]])
-
-            for ki, (s, c) in enumerate(zip(keypoint_scores[max_index, :], keypoint_coords[max_index, :, :])):
-                tmp_data[posenet.PART_NAMES[ki]] = c.tolist()
-
-            out_data['feature_1'] = xy_to_feature_1(tmp_data['leftShoulder'], tmp_data['rightShoulder'], tmp_data['leftHip'], tmp_data['rightHip'])
-            out_data['feature_2'] = xy_to_feature_2(tmp_data['leftShoulder'], tmp_data['rightShoulder'], tmp_data['leftElbow'], tmp_data['rightElbow'])
-            out_data['feature_3'] = xy_to_feature_3(tmp_data['leftHip'], tmp_data['rightHip'], tmp_data['leftKnee'], tmp_data['rightKnee'])
-            out_data['feature_4'] = xy_to_feature_4(tmp_data['leftHip'], tmp_data['rightHip'], tmp_data['leftShoulder'], tmp_data['rightShoulder'])
-            out_data['feature_5'] = xy_to_feature_5(tmp_data['leftShoulder'], tmp_data['rightShoulder'], tmp_data['leftElbow'], tmp_data['rightElbow'], tmp_data['leftWrist'], tmp_data['rightWrist'])
-            out_data['feature_6'] = xy_to_feature_6(tmp_data['leftHip'], tmp_data['rightHip'], tmp_data['leftKnee'], tmp_data['rightKnee'], tmp_data['leftAnkle'], tmp_data['rightAnkle'])
             
-            out_data['total']= list()
-            out_data['total'].extend([out_data['feature_1']])
-            out_data['total'].extend([out_data['feature_2']])
-            out_data['total'].extend([out_data['feature_3']])
-            out_data['total'].extend([out_data['feature_4']])
-            out_data['total'].extend([out_data['feature_5'][0]])
-            out_data['total'].extend([out_data['feature_5'][1]])
-            out_data['total'].extend([out_data['feature_6'][0]])
-            out_data['total'].extend([out_data['feature_6'][1]])
+            if pose_scores[max_index] != 0. :
+                tmp_data = dict()
+                out_data = dict(image_name=[f[10:-4]])
 
-            import pdb;pdb.set_trace()
+                for ki, (s, c) in enumerate(zip(keypoint_scores[max_index, :], keypoint_coords[max_index, :, :])):
+                    tmp_data[posenet.PART_NAMES[ki]] = c.tolist()
 
-            with open(os.path.join(args.output_dir,f[10:-4]+".json"),"w") as json_file :
-                json.dump(out_data, json_file, indent="\t")
+                out_data['feature_1'] = xy_to_feature_1(tmp_data['leftShoulder'], tmp_data['rightShoulder'], tmp_data['leftHip'], tmp_data['rightHip'])
+                out_data['feature_2'] = xy_to_feature_2(tmp_data['leftShoulder'], tmp_data['rightShoulder'], tmp_data['leftElbow'], tmp_data['rightElbow'])
+                out_data['feature_3'] = xy_to_feature_3(tmp_data['leftHip'], tmp_data['rightHip'], tmp_data['leftKnee'], tmp_data['rightKnee'])
+                out_data['feature_4'] = xy_to_feature_4(tmp_data['leftHip'], tmp_data['rightHip'], tmp_data['leftShoulder'], tmp_data['rightShoulder'])
+                out_data['feature_5'] = xy_to_feature_5(tmp_data['leftShoulder'], tmp_data['rightShoulder'], tmp_data['leftElbow'], tmp_data['rightElbow'], tmp_data['leftWrist'], tmp_data['rightWrist'])
+                out_data['feature_6'] = xy_to_feature_6(tmp_data['leftHip'], tmp_data['rightHip'], tmp_data['leftKnee'], tmp_data['rightKnee'], tmp_data['leftAnkle'], tmp_data['rightAnkle'])
+                
+                out_data['total_feature'] = list()
+                out_data['total_feature'].extend([out_data['feature_1']])
+                out_data['total_feature'].extend([out_data['feature_2']])
+                out_data['total_feature'].extend([out_data['feature_3']])
+                out_data['total_feature'].extend([out_data['feature_4']])
+                out_data['total_feature'].extend([out_data['feature_5'][0]])
+                out_data['total_feature'].extend([out_data['feature_5'][1]])
+                out_data['total_feature'].extend([out_data['feature_6'][0]])
+                out_data['total_feature'].extend([out_data['feature_6'][1]])
 
-            
+                out_data['skeleton_vector'] = tmp_data
 
+                with open(os.path.join(args.output_dir,f[10:-4]+".json"),"w") as json_file :
+                    json.dump(out_data, json_file, indent="\t")
 
     print('Average FPS:', len(filenames) / (time.time() - start))
 
