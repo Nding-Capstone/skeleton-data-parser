@@ -13,9 +13,9 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--model', type=int, default=101)
 parser.add_argument('--scale_factor', type=float, default=1.0)
 parser.add_argument('--notxt', action='store_true')
-parser.add_argument('--video_dir', type=str, default='./video_in/러브잇_3.mp4')
+parser.add_argument('--video_dir', type=str, default='./video_in')
 parser.add_argument('--image_dir', type=str, default='./test_in')
-parser.add_argument('--output_dir', type=str, default='./test_out/러브잇_3')
+parser.add_argument('--output_dir', type=str, default='./test_out')
 args = parser.parse_args()
 
 def distance(x1, y1, x2, y2):
