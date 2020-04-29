@@ -120,92 +120,95 @@ def main():
             os.makedirs(args.image_dir)
 
     for iv,v in enumerate(video_filenames):
-        video2frame(v,args.image_dir)
-
-    if args.output_dir:
-        if not os.path.exists(args.output_dir):
-            os.makedirs(args.output_dir)
-
-    filenames = [f.path for f in os.scandir(args.image_dir) if f.is_file() and f.path.endswith(('.png', '.jpg'))]
-
-    start = time.time()
-    for i,f in enumerate(filenames):
-
-        input_image, draw_image, output_scale = posenet.read_imgfile(
-            f, scale_factor=args.scale_factor, output_stride=output_stride)
-
-        with torch.no_grad():
-            input_image = torch.Tensor(input_image).cuda()
-
-            heatmaps_result, offsets_result, displacement_fwd_result, displacement_bwd_result = model(input_image)
-
-            pose_scores, keypoint_scores, keypoint_coords = posenet.decode_multiple_poses(
-                heatmaps_result.squeeze(0),
-                offsets_result.squeeze(0),
-                displacement_fwd_result.squeeze(0),
-                displacement_bwd_result.squeeze(0),
-                output_stride=output_stride,
-                max_pose_detections=10,
-                min_pose_score=0.25)
-
-        keypoint_coords *= output_scale
+        if not os.path.exists(args.image_dir+'/'+v[11:-4]+'/'):
+            os.makedirs(args.image_dir+'/'+v[11:-4]+'/')
+        video2frame(v,args.image_dir+'/'+v[11:-4]+'/')
 
         if args.output_dir:
-            draw_image = posenet.draw_skel_and_kp(draw_image, pose_scores, keypoint_scores, keypoint_coords,min_pose_score=0.25, min_part_score=0.25)
-            cv2.imwrite(os.path.join(args.output_dir, os.path.relpath(f, args.image_dir)), draw_image)
+          if not os.path.exists(args.output_dir+'/'+v[11:-4]+'/'):
+            os.makedirs(args.output_dir+'/'+v[11:-4]+'/')
 
-        if not args.notxt:
-            print()
-            print("Results for image: %s" % f)
+    for iv,v in enumerate(video_filenames):
+      filenames = [f.path for f in os.scandir(args.image_dir+'/'+v[11:-4]+'/') if f.is_file() and f.path.endswith(('.png', '.jpg'))]
+      
+      start = time.time()
+      for i,f in enumerate(filenames):
 
-            max_score = 0
-            max_index = 0
-            ignore = 0
+          input_image, draw_image, output_scale = posenet.read_imgfile(
+              f, scale_factor=args.scale_factor, output_stride=output_stride)
 
-            for pi in range(len(pose_scores)):
+          with torch.no_grad():
+              input_image = torch.Tensor(input_image).cuda()
 
-                if max_score > pose_scores[pi] :
-                    max_index = pi
+              heatmaps_result, offsets_result, displacement_fwd_result, displacement_bwd_result = model(input_image)
 
-                if pose_scores[pi] == 0.:
-                    ignore = 1
-                    break
+              pose_scores, keypoint_scores, keypoint_coords = posenet.decode_multiple_poses(
+                  heatmaps_result.squeeze(0),
+                  offsets_result.squeeze(0),
+                  displacement_fwd_result.squeeze(0),
+                  displacement_bwd_result.squeeze(0),
+                  output_stride=output_stride,
+                  max_pose_detections=10,
+                  min_pose_score=0.25)
 
-                print('Pose #%d, score = %f' % (pi, pose_scores[pi]))
+          keypoint_coords *= output_scale
 
-                for ki, (s, c) in enumerate(zip(keypoint_scores[pi, :], keypoint_coords[pi, :, :])):
-                    print('Keypoint %s, score = %f, coord = %s' % (posenet.PART_NAMES[ki], s, c))
-            
-            if pose_scores[max_index] != 0. :
-                tmp_data = dict()
-                out_data = dict(image_name=[f[10:-4]])
+          if args.output_dir:
+              draw_image = posenet.draw_skel_and_kp(draw_image, pose_scores, keypoint_scores, keypoint_coords,min_pose_score=0.25, min_part_score=0.25)
+              cv2.imwrite(os.path.join(args.output_dir, os.path.relpath(f, args.image_dir)), draw_image)
 
-                for ki, (s, c) in enumerate(zip(keypoint_scores[max_index, :], keypoint_coords[max_index, :, :])):
-                    tmp_data[posenet.PART_NAMES[ki]] = c.tolist()
+          if not args.notxt:
+              print()
+              print("Results for image: %s" % f)
 
-                out_data['feature_1'] = xy_to_feature_1(tmp_data['leftShoulder'], tmp_data['rightShoulder'], tmp_data['leftHip'], tmp_data['rightHip'])
-                out_data['feature_2'] = xy_to_feature_2(tmp_data['leftShoulder'], tmp_data['rightShoulder'], tmp_data['leftElbow'], tmp_data['rightElbow'])
-                out_data['feature_3'] = xy_to_feature_3(tmp_data['leftHip'], tmp_data['rightHip'], tmp_data['leftKnee'], tmp_data['rightKnee'])
-                out_data['feature_4'] = xy_to_feature_4(tmp_data['leftHip'], tmp_data['rightHip'], tmp_data['leftShoulder'], tmp_data['rightShoulder'])
-                out_data['feature_5'] = xy_to_feature_5(tmp_data['leftShoulder'], tmp_data['rightShoulder'], tmp_data['leftElbow'], tmp_data['rightElbow'], tmp_data['leftWrist'], tmp_data['rightWrist'])
-                out_data['feature_6'] = xy_to_feature_6(tmp_data['leftHip'], tmp_data['rightHip'], tmp_data['leftKnee'], tmp_data['rightKnee'], tmp_data['leftAnkle'], tmp_data['rightAnkle'])
-                
-                out_data['total_feature'] = list()
-                out_data['total_feature'].extend([out_data['feature_1']])
-                out_data['total_feature'].extend([out_data['feature_2']])
-                out_data['total_feature'].extend([out_data['feature_3']])
-                out_data['total_feature'].extend([out_data['feature_4']])
-                out_data['total_feature'].extend([out_data['feature_5'][0]])
-                out_data['total_feature'].extend([out_data['feature_5'][1]])
-                out_data['total_feature'].extend([out_data['feature_6'][0]])
-                out_data['total_feature'].extend([out_data['feature_6'][1]])
+              max_score = 0
+              max_index = 0
+              ignore = 0
 
-                out_data['skeleton_vector'] = tmp_data
+              for pi in range(len(pose_scores)):
 
-                with open(os.path.join(args.output_dir,f[10:-4]+".json"),"w") as json_file :
-                    json.dump(out_data, json_file, indent="\t")
+                  if max_score > pose_scores[pi] :
+                      max_index = pi
 
-    print('Average FPS:', len(filenames) / (time.time() - start))
+                  if pose_scores[pi] == 0.:
+                      ignore = 1
+                      break
+
+                  print('Pose #%d, score = %f' % (pi, pose_scores[pi]))
+
+                  for ki, (s, c) in enumerate(zip(keypoint_scores[pi, :], keypoint_coords[pi, :, :])):
+                      print('Keypoint %s, score = %f, coord = %s' % (posenet.PART_NAMES[ki], s, c))
+              
+              if pose_scores[max_index] != 0. :
+                  tmp_data = dict()
+                  out_data = dict(image_name=[f[10:-4]])
+
+                  for ki, (s, c) in enumerate(zip(keypoint_scores[max_index, :], keypoint_coords[max_index, :, :])):
+                      tmp_data[posenet.PART_NAMES[ki]] = c.tolist()
+
+                  out_data['feature_1'] = xy_to_feature_1(tmp_data['leftShoulder'], tmp_data['rightShoulder'], tmp_data['leftHip'], tmp_data['rightHip'])
+                  out_data['feature_2'] = xy_to_feature_2(tmp_data['leftShoulder'], tmp_data['rightShoulder'], tmp_data['leftElbow'], tmp_data['rightElbow'])
+                  out_data['feature_3'] = xy_to_feature_3(tmp_data['leftHip'], tmp_data['rightHip'], tmp_data['leftKnee'], tmp_data['rightKnee'])
+                  out_data['feature_4'] = xy_to_feature_4(tmp_data['leftHip'], tmp_data['rightHip'], tmp_data['leftShoulder'], tmp_data['rightShoulder'])
+                  out_data['feature_5'] = xy_to_feature_5(tmp_data['leftShoulder'], tmp_data['rightShoulder'], tmp_data['leftElbow'], tmp_data['rightElbow'], tmp_data['leftWrist'], tmp_data['rightWrist'])
+                  out_data['feature_6'] = xy_to_feature_6(tmp_data['leftHip'], tmp_data['rightHip'], tmp_data['leftKnee'], tmp_data['rightKnee'], tmp_data['leftAnkle'], tmp_data['rightAnkle'])
+                  
+                  out_data['total_feature'] = list()
+                  out_data['total_feature'].extend([out_data['feature_1']])
+                  out_data['total_feature'].extend([out_data['feature_2']])
+                  out_data['total_feature'].extend([out_data['feature_3']])
+                  out_data['total_feature'].extend([out_data['feature_4']])
+                  out_data['total_feature'].extend([out_data['feature_5'][0]])
+                  out_data['total_feature'].extend([out_data['feature_5'][1]])
+                  out_data['total_feature'].extend([out_data['feature_6'][0]])
+                  out_data['total_feature'].extend([out_data['feature_6'][1]])
+
+                  out_data['skeleton_vector'] = tmp_data
+
+                  with open(os.path.join(args.output_dir,f[10:-4]+".json"),"w") as json_file :
+                      json.dump(out_data, json_file, indent="\t")
+
+      print('Average FPS:', len(filenames) / (time.time() - start))
 
 
 if __name__ == "__main__":
